@@ -1,0 +1,182 @@
+{
+  "file": {
+    "enabled": true,
+    "action": "file {INCISOR_BENCH_FILE}",
+    "description": "file: binary type, architecture, linkage"
+  },
+  "ldd": {
+    "enabled": true,
+    "action": "ldd {INCISOR_BENCH_FILE}",
+    "description": "ldd: shared library dependencies and resolved paths",
+    "prompt_sections": ["PARA_LIBS", "GPU_LIBS", "VCPU_RUNTIME", "IO_LIBS"]
+  },
+  "ldd_r": {
+    "enabled": true,
+    "action": "ldd -r {INCISOR_BENCH_FILE}",
+    "description": "ldd -r: process all relocations — unresolved symbol errors and GLIBC version requirements"
+  },
+  "readelf": {
+    "enabled": true,
+    "action": "readelf -aW {INCISOR_BENCH_FILE}",
+    "description": "readelf -aW: full ELF headers, section table, symbol tables, dynamic section, relocations (--wide prevents truncation)",
+    "prompt_sections": ["PARA_LIBS", "GPU_LIBS"]
+  },
+  "readelf_n": {
+    "enabled": true,
+    "action": "readelf -n {INCISOR_BENCH_FILE}",
+    "description": "readelf -n: ELF notes — ABI version, build ID, x86 ISA feature flags"
+  },
+  "readelf_arch": {
+    "enabled": true,
+    "action": "readelf -A {INCISOR_BENCH_FILE}",
+    "description": "readelf -A: architecture-specific attributes — ARM NEON/SVE/FP, RISC-V ISA string, MIPS ABI level"
+  },
+  "nm": {
+    "enabled": true,
+    "action": "nm --demangle -S --special-syms {INCISOR_BENCH_FILE}",
+    "description": "nm --demangle -S --special-syms: full symbol table with demangled C++ names and per-symbol sizes (column 2 in hex bytes)",
+    "prompt_sections": ["PARA_SYMBOLS", "MEM_SYMBOLS", "VCPU_RUNTIME", "IO_LIBS", "IO_SYMBOLS"]
+  },
+  "nm_undef": {
+    "enabled": true,
+    "action": "nm -u --demangle {INCISOR_BENCH_FILE}",
+    "description": "nm -u: undefined (external) symbols only — compact list of all external API dependencies (MPI, pthread, BLAS, CUDA runtime, HDF5, etc.)"
+  },
+  "nm_dynamic": {
+    "enabled": true,
+    "action": "nm -D --demangle -S {INCISOR_BENCH_FILE}",
+    "description": "nm -D: dynamic symbol table (.dynsym) — survives stripping; shows imported/exported symbols for dynamic linking"
+  },
+  "size": {
+    "enabled": true,
+    "action": "size -A {INCISOR_BENCH_FILE}",
+    "description": "size -A: section sizes (SysV format) — .bss = pre-allocated arrays, .data = initialized static storage",
+    "prompt_sections": ["MEM_STATIC"]
+  },
+  "size_b": {
+    "enabled": true,
+    "action": "size -B {INCISOR_BENCH_FILE}",
+    "description": "size -B: Berkeley format — text/data/bss/total in one line; quick static memory footprint"
+  },
+  "strings": {
+    "enabled": true,
+    "action": "strings -t x -a -n 8 {INCISOR_BENCH_FILE}",
+    "description": "strings -t x -a -n8: all printable strings (≥8 chars) with hex file offsets — cross-reference offsets with readelf section addresses to identify which section each string comes from",
+    "prompt_sections": ["MEM_DISASM", "GPU_STRINGS", "VCPU_STRINGS", "IO_STRINGS"]
+  },
+  "comment": {
+    "enabled": true,
+    "action": "objdump -s -j .comment {INCISOR_BENCH_FILE}",
+    "description": "objdump -s -j .comment: embedded compiler version string (GCC/Clang) — may reveal -O level, -fopenmp, sanitizers"
+  },
+  "objdump": {
+    "enabled": true,
+    "action": "objdump -DC {INCISOR_BENCH_FILE}",
+    "description": "objdump -DC: full disassembly of all sections with demangled names — grep for ymm/zmm (AVX/AVX-512), call targets, imported symbols",
+    "prompt_sections": ["MEM_DISASM", "SIMD_DISASM"]
+  },
+  "readelf_dwarf": {
+    "enabled": true,
+    "action": "readelf -wi -W {INCISOR_BENCH_FILE}",
+    "description": "readelf -wi -W: DWARF .debug_info — source languages, compilation units, inlined functions"
+  },
+  "readelf_dwarf_all": {
+    "enabled": true,
+    "action": "readelf -w -W {INCISOR_BENCH_FILE}",
+    "description": "readelf -w -W: full DWARF dump (all sections) — line tables, frame info, ranges, location lists",
+    "prompt_sections": ["MEM_DWARF"]
+  },
+  "r2": {
+    "enabled": true,
+    "action": "{SCRIPT_DIR}/tools/r2_analyze.sh {INCISOR_BENCH_FILE} {OUTDIR}/r2_afl.txt {OUTDIR}/r2_callgraph.json {OUTDIR}/r2_decomp.txt",
+    "outputs": [
+      {"file": "r2_afl.txt",        "description": "radare2 afl: function list with addresses, block counts, and sizes — OMP function variants confirm OpenMP parallel regions",
+       "prompt_sections": ["PARA_FUNCTIONS"]},
+      {"file": "r2_callgraph.json", "description": "radare2 agCj: global call graph in JSON format — nodes are functions, edges are calls",
+       "prompt_sections": ["CFG_CALLGRAPH"]},
+      {"file": "r2_decomp.txt",     "description": "radare2 pdc: pseudo-C decompilation of all functions — source-like code showing algorithm structure and data flow",
+       "prompt_sections": ["DECOMP_R2"]}
+    ]
+  },
+  "angr": {
+    "enabled": true,
+    "action": "{SCRIPT_DIR}/tools/angr_analyze.py {INCISOR_BENCH_FILE} {OUTDIR}/angr_cfg.json {OUTDIR}/angr_decomp.txt {OUTDIR}/angr_functions.txt",
+    "outputs": [
+      {"file": "angr_cfg.json",      "description": "angr CFG call graph JSON: {functions: [{addr, name, size, blocks, is_simprocedure, has_return}], calls: [{from_addr, from_name, to_addr, to_name}]}",
+       "prompt_sections": ["CFG_FUNCTIONS"]},
+      {"file": "angr_functions.txt", "description": "angr named-function table: total recovered count + per-function address, block count, and byte size — OMP function variants confirm OpenMP parallel regions",
+       "prompt_sections": ["PARA_FUNCTIONS", "CFG_FUNCTIONS"]},
+      {"file": "angr_decomp.txt",    "description": "angr Decompiler: pseudo-C decompilation of all named functions — source-like code for algorithms and data structures",
+       "prompt_sections": ["DECOMP_ANGR"]}
+    ]
+  },
+  "pahole": {
+    "enabled": true,
+    "action": "pahole {INCISOR_BENCH_FILE}",
+    "description": "pahole: struct/union layouts from DWARF — per-object sizes reveal heap allocation footprints",
+    "prompt_sections": ["MEM_STRUCT"]
+  },
+  "bloaty": {
+    "enabled": true,
+    "action": "{SCRIPT_DIR}/tools/bloaty/bin/bloaty -d sections,symbols -n 0 {INCISOR_BENCH_FILE}",
+    "description": "bloaty -d sections,symbols -n0: binary size ranked by both section and symbol — top symbols dominate static memory",
+    "prompt_sections": ["MEM_BLOAT"]
+  },
+  "cuobjdump": {
+    "enabled": true,
+    "action": "cuobjdump -sass {INCISOR_BENCH_FILE}",
+    "description": "cuobjdump -sass: embedded CUDA fat binary — GPU kernel disassembly, register count, shared memory per kernel",
+    "prompt_sections": ["GPU_KERNELS"]
+  },
+  "cuobjdump_ptx": {
+    "enabled": true,
+    "action": "cuobjdump -ptx {INCISOR_BENCH_FILE}",
+    "description": "cuobjdump -ptx: embedded PTX (GPU IR) — compute capability (sm_XX), __shared__ declarations, tensor core intrinsics (mma.sync)"
+  },
+  "checksec": {
+    "enabled": true,
+    "action": "checksec --file={INCISOR_BENCH_FILE}",
+    "description": "checksec: NX, PIE, RELRO, stack canary, FORTIFY, CFI/CET — security features that affect memory layout, address space, and runtime overhead"
+  },
+  "llvm_stack_sizes": {
+    "enabled": true,
+    "action": "llvm-readobj --stack-sizes {INCISOR_BENCH_FILE}",
+    "description": "llvm-readobj --stack-sizes: per-function stack frame sizes — predicts per-thread stack memory; only present when compiled with -fstack-size-section (Clang) or equivalent"
+  },
+  "llvm_dwarf_stats": {
+    "enabled": true,
+    "action": "llvm-dwarfdump --statistics {INCISOR_BENCH_FILE}",
+    "description": "llvm-dwarfdump --statistics: DWARF debug info coverage fractions — indicates reliability of pahole/DWARF-based analyses; low coverage means stripped/optimized build"
+  },
+  "gdb_functions": {
+    "enabled": true,
+    "action": "gdb -batch -ex 'info functions' {INCISOR_BENCH_FILE}",
+    "description": "gdb info functions: function signatures with full parameter types (e.g. void compute(float*, size_t, int)) — cleaner than raw DWARF; only useful with debug info"
+  },
+  "gdb_types": {
+    "enabled": true,
+    "action": "gdb -batch -ex 'info types' {INCISOR_BENCH_FILE}",
+    "description": "gdb info types: all defined types including C++ template instantiations — filter 'std::' noise; reveals Buffer<float>, Buffer<double>, etc."
+  },
+  "ghidra": {
+    "enabled": true,
+    "action": "{SCRIPT_DIR}/tools/ghidra_analyze.sh {INCISOR_BENCH_FILE} {OUTDIR} {SCRIPT_DIR}",
+    "outputs": [
+      {"file": "ghidra_decomp.txt",            "description": "Ghidra decompiler: pseudo-C decompilation of all functions — highest quality source-like reconstruction with type recovery",
+       "prompt_sections": ["DECOMP_GHIDRA"]},
+      {"file": "ghidra.txt",                   "description": "Ghidra headless log: import/analyze status + script runtime"},
+      {"file": "ghidra_functions.csv",         "description": "Ghidra: per-function index (addr, size, blocks, stack frame, xrefs in, calls out, loop heuristic)",
+       "prompt_sections": ["MEM_STACK", "SIMD_COMPUTE", "CFG_HOTSPOTS"]},
+      {"file": "ghidra_imports_xrefs.csv",     "description": "Ghidra: imported symbols with callsites + caller functions",
+       "prompt_sections": ["CFG_IMPORTS"]},
+      {"file": "ghidra_strings_xrefs.csv",     "description": "Ghidra: strings with xrefs + referencing functions",
+       "prompt_sections": ["IO_XREFS"]},
+      {"file": "ghidra_alloc_sites.csv",       "description": "Ghidra: allocation/free-like callsites with best-effort size-arg extraction",
+       "prompt_sections": ["MEM_ALLOC"]},
+      {"file": "ghidra_parallel_evidence.csv", "description": "Ghidra: evidence for OpenMP/pthreads/MPI/TBB/CUDA/HIP/OpenCL (imports + strings)",
+       "prompt_sections": ["PARA_EVIDENCE", "GPU_EVIDENCE"]},
+      {"file": "ghidra_io_evidence.csv",       "description": "Ghidra: evidence for file/net/mmap/async/compression/data-format APIs (imports + strings)",
+       "prompt_sections": ["IO_EVIDENCE"]}
+    ]
+  }
+}

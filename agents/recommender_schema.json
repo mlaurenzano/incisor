@@ -1,0 +1,72 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "recommendations": {
+      "type": "array",
+      "description": "Top 10 instance recommendations ranked cheapest to most expensive (rank 1 = best value).",
+      "minItems": 10,
+      "maxItems": 10,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 10,
+            "description": "1 = best value / cheapest qualifying instance."
+          },
+          "api_name": {
+            "type": "string",
+            "description": "EC2 API instance type name (e.g. m7a.4xlarge)."
+          },
+          "physical_processor": {
+            "type": "string",
+            "description": "CPU brand/model string from the catalog."
+          },
+          "vcpus": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Number of vCPUs."
+          },
+          "memory_gib": {
+            "type": "string",
+            "description": "Instance memory string from the catalog (e.g. '32 GiB')."
+          },
+          "gpus": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of GPUs (0 for CPU-only instances)."
+          },
+          "on_demand_hourly": {
+            "type": "number",
+            "minimum": 0,
+            "description": "On-demand Linux price in USD per hour."
+          },
+          "generation": {
+            "type": "string",
+            "enum": ["current", "previous"],
+            "description": "Whether this is a current or previous generation instance."
+          },
+          "notes": {
+            "type": "string",
+            "description": "Brief rationale: why this instance fits, AMD/SIMD notes, trade-offs."
+          }
+        },
+        "required": [
+          "rank",
+          "api_name",
+          "physical_processor",
+          "vcpus",
+          "memory_gib",
+          "gpus",
+          "on_demand_hourly",
+          "generation",
+          "notes"
+        ]
+      }
+    }
+  },
+  "required": ["recommendations"]
+}

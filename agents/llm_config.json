@@ -1,0 +1,7 @@
+{
+    "model":          "claudeopus",
+    "use_source":     false,
+    "use_run":        0,
+    "analysis_level": "L4bin",
+    "analysis_dir":   "agentic-L4bin-claudeopus"
+}

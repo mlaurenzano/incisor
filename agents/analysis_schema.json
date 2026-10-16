@@ -1,0 +1,145 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "memory": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value_gb": {
+          "type": "number",
+          "description": "Estimated peak memory requirement in GB.",
+          "minimum": 0
+        },
+        "rationale": { "type": "string", "description": "Evidence from tool output (section sizes, symbol names, strings) that supports this estimate." },
+        "confidence": { "type": "string", "enum": ["low", "medium", "high"] }
+      },
+      "required": ["value_gb", "rationale", "confidence"]
+    },
+    "vcpu_count": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "description": "Estimated required vCPU count, or \"ALL\" if the code is expected to use all available vCPUs.",
+          "anyOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "enum": ["ALL"] }
+          ]
+        },
+        "rationale": { "type": "string", "description": "Evidence from tool output (parallelization libraries, thread symbols, argument hints) that supports this estimate." },
+        "confidence": { "type": "string", "enum": ["low", "medium", "high"] }
+      },
+      "required": ["value", "rationale", "confidence"]
+    },
+    "accelerator": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Type of accelerator required.",
+          "enum": ["none", "gpu", "other"]
+        },
+        "rationale": { "type": "string", "description": "Evidence from tool output (CUDA/HIP/OpenCL libraries, GPU symbols, cuobjdump output) that supports this estimate." },
+        "confidence": { "type": "string", "enum": ["low", "medium", "high"] }
+      },
+      "required": ["type", "rationale", "confidence"]
+    },
+    "gpu_count": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "description": "Estimated number of GPUs required. Use 0 if none needed, an integer for a specific count, or \"ALL\" if the code is expected to use all available GPUs.",
+          "anyOf": [
+            { "type": "integer", "minimum": 0 },
+            { "type": "string", "enum": ["ALL"] }
+          ]
+        },
+        "rationale": { "type": "string", "description": "Evidence (nccl, multi-GPU init symbols, argument names) that supports this estimate." },
+        "confidence": { "type": "string", "enum": ["low", "medium", "high"] }
+      },
+      "required": ["value", "rationale", "confidence"]
+    },
+    "gpu_memory_gb": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value_gb": {
+          "type": "number",
+          "description": "Estimated GPU memory requirement per GPU in GB. Use 0 if no GPU acceleration is needed.",
+          "minimum": 0
+        },
+        "rationale": { "type": "string", "description": "Evidence (kernel register pressure from cuobjdump, model size hints, strings) that supports this estimate." },
+        "confidence": { "type": "string", "enum": ["low", "medium", "high"] }
+      },
+      "required": ["value_gb", "rationale", "confidence"]
+    },
+    "parallelization": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "strategies": {
+          "type": "array",
+          "description": "All parallelization approaches used/required. Use [\"none\"] if no parallelism is detected.",
+          "items": {
+            "type": "string",
+            "enum": [
+              "none",
+              "threading",
+              "openmp",
+              "mpi",
+              "cuda",
+              "hip",
+              "python-multiprocessing",
+              "other"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "rationale": { "type": "string", "description": "Evidence (specific library names, init symbols, call graph patterns) that supports this classification." },
+        "confidence": { "type": "string", "enum": ["low", "medium", "high"] }
+      },
+      "required": ["strategies", "rationale", "confidence"]
+    },
+    "io_bound": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "boolean",
+          "description": "True if the workload is primarily I/O bound (large file reads/writes, network I/O) rather than compute-bound."
+        },
+        "rationale": { "type": "string", "description": "Evidence (strings output, argument names, library dependencies, vectorization density) that supports this classification." },
+        "confidence": { "type": "string", "enum": ["low", "medium", "high"] }
+      },
+      "required": ["value", "rationale", "confidence"]
+    },
+    "required_platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "string",
+          "description": "CPU architecture required to run this binary. Use \"arm64\" or \"x86_64\" for compiled native binaries targeting a specific ISA; use \"ANY\" for platform-independent executables such as Python scripts, JVM bytecode, or shell scripts.",
+          "enum": ["arm64", "x86_64", "ANY"]
+        },
+        "rationale": { "type": "string", "description": "Evidence (ELF machine type from readelf/file output, ISA-specific instructions, interpreter shebang, or bytecode format) that supports this classification." },
+        "confidence": { "type": "string", "enum": ["low", "medium", "high"] }
+      },
+      "required": ["value", "rationale", "confidence"]
+    }
+  },
+  "required": [
+    "memory",
+    "vcpu_count",
+    "accelerator",
+    "gpu_count",
+    "gpu_memory_gb",
+    "parallelization",
+    "io_bound",
+    "required_platform"
+  ]
+}

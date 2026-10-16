@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+
+set -eo pipefail
+
+llm_config="$(cd "$(dirname "$0")" && pwd)/agents/llm_config.json"
+noinst=$(jq -r '.analysis_dir' "${llm_config}")
+
+if [ "${1}" == "" ]; then
+    echo "usage: incisor_run <app>"
+    exit 1
+fi
+
+req_instance="${noinst}"
+if [ "${2}" != "" ]; then
+    req_instance=${2}
+fi
+
+app="${1}"
+
+run_dir="${app}/${req_instance}"
+mkdir ${run_dir}
+
+link_runnable() {
+    for f in ../program/runnable/*; do
+        cp "$f" .
+    done
+}
+
+link_source() {
+    for f in ../program/source/*; do
+        cp "$f" .
+    done
+}
+
+openmp_parallel() {
+    local n="$1"; shift
+    echo "OMP_PROC_BIND=spread OMP_NUM_THREADS=${n} $@"
+}
+
+mpi_parallel() {
+    local n="$1"; shift
+    echo "mpiexec --display-map --display-allocation --oversubscribe -np ${n} $@"
+}
+
+torchrun_parallel() {
+    local n="$1"; shift
+    echo "torchrun --nproc_per_node=${n} $@"
+}
+
+wrap_parallel() {
+    local partyp="$1" parcnt="$2"; shift 2
+    [ -z "${partyp}" ] && echo "$@" || ${partyp}_parallel ${parcnt} "$@"
+}
+
+incisor_run() {
+    local run_cmd=$(echo "$1" \
+        | sed "s|\\./${3}|bash ./incisor_harness.sh ./${3}|g")
+
+    cat ../../sky_template.yaml | sed "s#@INCISOR_WORKDIR@#$(pwd)#g" | sed "s#@INCISOR_BENCHMARK@#${app}/${instance}#g" | sed "s#@INCISOR_INSTANCE_TYPE@#${instance}#g" | sed "s#@INCISOR_SETUP_CMD@#$2\n  bash ./incisor_setup.sh#g" | sed "s#@INCISOR_RUN_CMD@#chmod +x ./${3}\n  ${run_cmd}#g" > ./sky.yaml
+    cluster_name=incisor-${instance}-$(openssl rand -hex 4)
+    sky launch -y -c ${cluster_name} ./sky.yaml
+    mkdir -p incisor_output/0001/
+    rsync -Pavz ${cluster_name}:/home/ubuntu/sky_workdir/incisor ./incisor_output/0001/
+    sky down -y ${cluster_name}
+    sky status
+}
+
+run_analysis() {
+    local run_cmd="$1"
+    if [ "${req_instance}" == "${noinst}" ]; then
+        local llm_config="../../agents/llm_config.json"
+        local model_key=$(jq -r '.model' "${llm_config}")
+
+	date +pre_analysis=%s
+        INCISOR_RUN_COMMAND="${run_cmd}" INCISOR_SOURCE_DIR="$(pwd)/../program/source" INCISOR_PRIOR_RUNS="$(pwd)/../program/history" INCISOR_BENCH_FILE="./${runner}" ../../agents/constraint_analysis.sh &> analysis.json
+	date +post_analysis=%s
+	date +pre_instances=%s
+        if [[ "${model_key}" == claude* ]]; then
+            ../../agents/instance_recommender.sh analysis.json > instances.json
+        else
+            ../../agents/instance_recommender_vllm.py analysis.json > instances.json
+        fi
+	date +post_instances=%s
+	instance="UNKNOWN-see-instances.json"
+    else
+        instance=${req_instance}
+    fi
+}
+
+(
+    cd ${run_dir}
+    
+    config="../program/config.json"
+    if [ ! -f "${config}" ]; then
+        echo "error: config file not found at ${app}/program/config.json" >&2
+        exit 1
+    fi
+
+    partyp=$(jq -r '.parallel_type' "${config}")
+    parcnt=$(jq -r '.parallel_count' "${config}")
+    runner=$(jq -r '.runner' "${config}")
+    runargs=$(jq -r '.run_args' "${config}")
+    setup_cfg=$(jq -r '.setup' "${config}")
+    link_type=$(jq -r '.link_type' "${config}")
+
+    if [ -n "${setup_cfg}" ]; then
+        setup="${setup_cfg}"
+    else
+        setup="echo 'running setup'"
+    fi
+
+    cp ../../incisor_setup.sh .
+    cp ../../incisor_harness.sh .
+    if [ "${link_type}" == "source" ]; then
+        link_source
+    else
+        link_runnable
+    fi
+
+    incisor_run_command="./${runner} ${runargs}"
+    run_analysis "$(wrap_parallel "${partyp}" "${parcnt}" ${incisor_run_command})"
+    if [ "${req_instance}" != "${noinst}" ]; then
+	incisor_run "$(wrap_parallel "${partyp}" "${parcnt}" ${incisor_run_command})" "${setup}" "${runner}"
+    fi
+) 2>&1 | tee ${run_dir}/run.log
+
+if [ "${req_instance}" == "${noinst}" ]; then
+    exit 0
+fi
+
+(
+    ./extract_data.sh ${run_dir}
+) 2>&1 | tee ${run_dir}/incisor_report.log
+
+./extract_run_status.sh --dir ${run_dir}
+
+./make_history_summary.sh ${run_dir}/incisor_report.log > ${run_dir}/history_summary.log
+
+mkdir -p "${app}/program/history"
+ln -sf "../../${req_instance}/history_summary.log" "${app}/program/history/${req_instance}"

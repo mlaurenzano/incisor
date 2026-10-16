@@ -1,0 +1,130 @@
+You are analyzing a compiled binary to estimate its runtime resource requirements for job scheduling purposes.
+These estimates are used directly for resource provisioning. Under-provisioning causes job failures and
+wasted queue time, which is far worse than over-provisioning. When uncertain, always round up and
+choose the higher end of any range. Never emit a lower-bound or conservative estimate — emit the
+upper-bound realistic estimate. If you derive a per-rank or per-process figure, multiply by the
+process/rank count to get the whole-job total before emitting the value.
+
+Binary:     @@BENCH_FILE@@
+Invocation: @@RUN_COMMAND@@
+
+Static analysis tools have been run against the binary and their outputs saved to files.
+Start by reading the MANIFEST at @@MANIFEST@@, which lists every available file and describes what it contains.
+The MANIFEST may also list extra reference files (input decks, configuration files, namelists, scripts)
+directly referenced by the binary or run command — read and grep these for problem size parameters,
+grid dimensions, dataset paths, and runtime options not visible from the binary alone.
+
+Note: r2, angr, and ghidra are heavyweight tools that may time out on large binaries — if their output
+files are absent from the MANIFEST, treat the affected estimates as lower confidence.
+
+Tool boundary: you may only access the explicit allowlisted files provided by the runner.
+If a path is not in the MANIFEST, do not try it.
+
+When reading the files, focus on the following signals:
+
+PARALLELIZATION
+  @PARA_LIBS@ — NEEDED entries reveal the parallelization model:
+    libgomp / libomp / libiomp5         → OpenMP
+    libmpi / libpmi / libfabric         → MPI
+    libcuda / libcudart / libnccl       → CUDA GPU
+    libhip / librocm / libamdhip        → HIP/ROCm GPU
+    libOpenCL                           → OpenCL GPU
+    libpython / libtorch / libtensorflow / libonnxruntime → ML framework
+  @PARA_SYMBOLS@ — undefined (external) symbols; most compact API dependency list:
+    GOMP_parallel, omp_get_num_threads  → OpenMP
+    MPI_Init, MPI_Comm_size             → MPI
+    cudaMalloc, ncclAllReduce, cuBLAS*  → CUDA
+    hipMalloc                           → HIP
+    pthread_create, std::thread         → CPU threading
+  @PARA_FUNCTIONS@ — functions named *._omp_fn.* confirm OpenMP parallel regions
+  @PARA_EVIDENCE@ — pre-classified evidence rows for OpenMP/pthreads/MPI/TBB/CUDA/HIP/OpenCL;
+    use as a cross-check and to catch cases the other tools miss
+  NOTE: report ALL parallelization schemes present as an array — e.g. ["openmp", "mpi"] if both are used
+
+VCPU COUNT
+  @VCPU_RUNTIME@ — OpenMP runtime present → default threadcount is all vCPUs ("ALL")
+  @VCPU_STRINGS@ — --num-threads / OMP_NUM_THREADS references may cap the thread count
+  invocation — OMP_NUM_THREADS=N in the invocation overrides the default
+  For MPI: rank count from -n / -np / --nranks argument → vcpu_count; if unspecified → "ALL"
+
+MEMORY
+  Estimate memory in three parts and sum them. The static total alone is almost always wrong.
+
+  1. Static footprint (lower bound only — treat as the floor, not the answer):
+     @MEM_STATIC@ — .bss and .data section totals
+     @MEM_SYMBOLS@ — column 2 is symbol size in hex bytes; sum ALL large symbols across all sections;
+       Fortran COMMON blocks and pre-allocated arrays appear as large .bss entries
+     @MEM_BLOAT@ — symbols ranked by size; confirms the dominant static allocations
+
+  2. Dynamic heap (usually dominates — this is the critical estimation step):
+     @MEM_ALLOC@ — read ALL rows exhaustively (file may be long; paginate
+       through it if needed); for every row, convert the size to bytes and
+       multiply by call_count; sum ALL sites — do not stop at the first large
+       allocation or skip smaller ones; repeated callsites in loops multiply
+       per-iteration cost significantly
+     @MEM_DWARF@ — DW_TAG_array_type entries carry DW_AT_upper_bound / DW_AT_count;
+       for each major array compute: element_size × ∏(dimension extents);
+       Fortran allocatable arrays often appear here with explicit bounds
+     @MEM_DISASM@ — compile-time constants (grid size, problem class, N) that
+       determine how much is allocated at runtime; cross-reference with alloc sites
+     @DECOMP_GHIDRA@ / @DECOMP_R2@ — grep for malloc(, calloc(, new , allocate( to read
+       size arguments in context; this is the most direct evidence of heap footprint
+     @MEM_STRUCT@ — per-struct sizes from DWARF; multiply by instance count for heap cost
+
+  3. Stack:
+     @MEM_STACK@ — stack_frame column; large values (>1 MB per function) add to
+       per-thread RSS; multiply by thread count for OpenMP programs
+
+  Sum all three parts. For MPI jobs, multiply the per-rank total by the rank count.
+  Always report the upper end of any range. Express the final estimate in GB.
+
+GPU
+  @GPU_LIBS@ — presence of libcuda, libcudart, libnccl, libhip, librocm, libOpenCL
+  @GPU_KERNELS@ — if device code present: registers and shared memory per kernel
+  @GPU_STRINGS@ — CUDA kernel names, --num-gpus / --devices argument strings
+  @GPU_EVIDENCE@ — CUDA/HIP/OpenCL rows confirm GPU usage and name kernel symbols
+
+I/O BEHAVIOR
+  @IO_LIBS@ — scientific I/O libraries: libhdf5, libnetcdf, libpnetcdf, libaio → heavy file I/O
+  @IO_SYMBOLS@ — standard I/O symbols: fread, fwrite, fopen, read, write, pread, pwrite, mmap, sendfile;
+    large counts of these → I/O-bound workload
+  @IO_STRINGS@ — file path patterns, checkpoint/dataset argument names, --input/--output flags
+  @IO_EVIDENCE@ — pre-classified rows for file/net/mmap/async/compression/data-format APIs;
+    use as a cross-check and to surface I/O patterns missed by symbol scan
+  @IO_XREFS@ — strings with referencing functions; file path / format strings
+    tied to specific call sites confirm active I/O paths
+
+REQUIRED PLATFORM
+  file.txt — ELF machine type: x86-64 → "x86_64", AArch64 → "arm64"; shebang or bytecode → "ANY"
+  readelf.txt — ELF Header Machine field gives the same info if file.txt is absent
+
+VECTORIZATION / COMPUTE INTENSITY
+  @SIMD_DISASM@ — x86: ymm/zmm registers → AVX/AVX-512; xmm → SSE
+    ARM: v0-v31 with .4s/.2d/.8h suffixes → NEON; z0-z31 / p0-p15 → SVE/SVE2
+    Dense SIMD usage → FP-heavy, compute-bound workload
+  @SIMD_COMPUTE@ — loop_heuristic column; functions with high block counts, loops,
+    and large sizes are the compute-intensive hot spots
+
+CFG / CALL STRUCTURE
+  @CFG_CALLGRAPH@ — call graph JSON; high fan-out from a single dispatch function → parallel runtime
+  @CFG_FUNCTIONS@ — function list with block counts and call edges; deeply nested call chains → algorithmic complexity
+  @CFG_HOTSPOTS@ — xrefs_in / calls_out columns give call-graph fan-in and fan-out per function;
+    high calls_out from a small set of functions indicates a dispatch/scheduler
+  @CFG_IMPORTS@ — maps each imported symbol to its callsites and caller functions;
+    use to confirm which code paths actually invoke key runtime symbols
+
+DECOMPILATION (pseudo-C source reconstruction — grep these for algorithm structure, allocation sizes, I/O paths)
+  @DECOMP_GHIDRA@ — Ghidra decompiler; highest quality with full type recovery; best source for
+    understanding complex functions, confirming malloc/new size arguments, and
+    tracing I/O call paths; absent if ghidra timed out
+  @DECOMP_R2@ — radare2 pdc decompilation of all functions; good coverage, lower type quality than
+    ghidra; absent if r2 timed out
+  @DECOMP_ANGR@ — angr function analysis; may be truncated on large binaries if angr timed out
+
+For each output field in your answer, cite specific evidence: filename and the exact symbol,
+library name, section size, or string that supports the estimate.
+Where a file is missing or empty, note it and mark the affected estimate as low confidence.
+
+@@SOURCE_DIR_SECTION@@
+
+@@RUN_DIR_SECTION@@

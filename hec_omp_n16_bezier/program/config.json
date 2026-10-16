@@ -1,0 +1,8 @@
+{
+    "parallel_type": "openmp",
+    "parallel_count": 16,
+    "runner": "main",
+    "run_args": "-f ./control.txt -n 40000 -m 8",
+    "setup": "",
+    "link_type": "runnable"
+}

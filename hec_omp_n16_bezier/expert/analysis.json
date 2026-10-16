@@ -1,0 +1,1 @@
+{"memory": {"value_gb": 18.41}, "vcpu_count": {"value": 16}, "accelerator": {"type": "none"}, "gpu_count": {"value": 0}, "gpu_memory_gb": {"value_gb": 0.0}, "parallelization": {"strategies": ["openmp"]}, "io_bound": {"value": false}, "required_platform": {"value": "x86_64"}}

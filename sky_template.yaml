@@ -1,0 +1,9 @@
+resources:
+  infra: aws/us-east-1
+  instance_type: @INCISOR_INSTANCE_TYPE@
+num_nodes: 1
+workdir: @INCISOR_WORKDIR@
+setup: |
+  @INCISOR_SETUP_CMD@
+run: |
+  @INCISOR_RUN_CMD@
