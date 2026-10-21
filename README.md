@@ -2,8 +2,19 @@
 
 Incisor analyzes a resource intensive batch program, asks an LLM to infer its
 resource constraints (memory, cores, I/O, parallelism), recommends AWS
-instance types, and can then launch the program on those instances through
-SkyPilot and collect runtime metrics with Prometheus.
+instance types, and then launch the program on those instances.
+If you use this code or data in your research, please cite our paper:
+
+```bibtex
+@inproceedings{laurenzano2026incisor,
+  author    = {Laurenzano, Michael A. and Cheng, Shihan and Hyde, David A. B.},
+  title     = {Incisor: Ex Ante Instance Selection in the Cloud},
+  booktitle = {Proceedings of the ACM Symposium on Cloud Computing (SoCC)},
+  year      = {2026},
+  doi       = {10.1145/3828161.3857875}
+}
+```
+
 
 The repository contains the pipeline scripts, the LLM agent and its prompts,
 and one example benchmark (`hec_omp_n16_bezier`, an OpenMP Bezier-surface
